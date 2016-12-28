@@ -17,30 +17,57 @@ def main():
 
     sess = tf.InteractiveSession()
 
-    # Data specification
+    ## Data specification
     img_x = 28
     img_y = 28
     img_color_channels = 1 # greyscale images
     num_pixels = img_x * img_y
     num_classes = 10
 
-    # Hyperparameters
+    ## Hyperparameters
     learning_rate = 0.5
     max_steps = 1000
     batch_size = 100
-    field_size_conv1 = 5 # size of receptive field
-    features_conv1 = 32 # output features for layer 1
+    # Layer 1
+    field_size_conv1 = 5
+    num_features_conv1 = 32
+    # Layer 2
+    field_size_conv2 = 5
+    num_features_conv2 = 64
+    # Layer 3
+    num_features_fc1 = 1024
 
+    ## Variable definitions
     # Inputs: pixel values x and class labels y_
     x = tf.placeholder(tf.float32, shape=[None, num_pixels])
     y_ = tf.placeholder(tf.float32, shape=[None, num_classes])
 
-    # First convolutional layer
-    W_conv1 = weight_variable([field_size_conv1, field_size_conv1, img_color_channels, features_conv1])
-    b_conv1 = bias_variable([features_conv1])
+    # Layer 1
+    W_conv1 = weight_variable([field_size_conv1, field_size_conv1, img_color_channels, num_features_conv1])
+    b_conv1 = bias_variable([num_features_conv1])
+
+    # Layer 2
+    W_conv2 = weight_variable([field_size_conv2, field_size_conv2, num_features_conv1, num_features_conv2])
+    b_conv2 = bias_variable([num_features_conv2])
+
+    # Layer 3
+    # We'll have gone through 2 lots of max pooling, which will shrink our dimensions
+    input_dimension_conv3 = (img_x / 2 / 2) * num_features_conv2
+    W_fc1 = weight_variable([input_dimension_conv3, ])
 
     # Wrangling x into the correct dimensions (i.e. a 28x28 image)
     x_image = tf.reshape(x, [-1, img_x, img_y, img_color_channels])
+
+    ## Computation graph definitions
+    # Compute the output of layer 1
+    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+    h_pool1 = max_pool_2x2(h_conv1)
+
+    # Compute the output of layer 2
+    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+    h_pool2 = max_pool_2x2(h_conv2)
+
+    #
 
     # Output scores as "unnormalized log probabilities"
     y = tf.matmul(x, W) + b
