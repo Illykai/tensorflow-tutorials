@@ -3,8 +3,8 @@
 def main():
     """Testing this thing"""
     print("This works")
-    for foo in range(0,10):
-        print(foo)
+    for num in range(0, 10):
+        print(num)
 
 if __name__ == "__main__":
     # Testing Git stuff
