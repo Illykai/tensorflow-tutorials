@@ -59,7 +59,6 @@ def main():
 
     print("Final accuracy: {0}".format(result))
 
-
     print("Done")
 
 if __name__ == "__main__":
