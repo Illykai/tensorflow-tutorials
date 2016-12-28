@@ -53,8 +53,9 @@ def main():
     b_conv2 = bias_variable([num_features_conv2])
 
     # Layer 3
-    # We'll have gone through 2 lots of max pooling, which will shrink our dimensions
-    input_dimension_conv3 = (img_x / 2 / 2) * num_features_conv2
+    # We'll have gone through 2 lots of max pooling, which will have shrunk our dimensions
+    pooled_dims = int(img_x / 2 / 2)
+    input_dimension_conv3 = pooled_dims * pooled_dims * num_features_conv2
     W_fc1 = weight_variable([input_dimension_conv3, num_features_fc1])
     b_fc1 = bias_variable([num_features_fc1])
 
@@ -94,6 +95,7 @@ def main():
     cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(y_conv, y_))
     # Optimization step
     train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
+
     # Model is considered correct if it gives true class the highest probability
     # Note that this is actually represented as unnormalized log probability
     correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
