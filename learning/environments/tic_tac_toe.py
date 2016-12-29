@@ -1,5 +1,5 @@
 """
-TicTacToe testing framework
+TicTacToe framework
 """
 
 def main():
@@ -37,22 +37,23 @@ class TicTacToeGame:
         if self.state[action] != self.CELL_EMPTY:
             return False
         else:
+            # +1 because 0 is the empty cell code
             player = self.turn % 2 + 1
             self.state[action] = player
+            self.turn = self.turn + 1
             return True
 
     def get_state(self):
         """
-        Return the raw state of the board. Turn number is not a part of the state.
+        Return a copy of the raw state of the board. Turn number is not a part of the state.
         """
-        return self.state
+        return list(self.state)
 
     def get_valid_moves(self):
         """
         The valid moves are any empty cell
         """
-        moves = filter(lambda x: self.state[x] == self.CELL_EMPTY, range(9))
-        return moves
+        return [move for move in range(9) if self.state[move] == self.CELL_EMPTY]
 
     def reset(self):
         """
@@ -70,6 +71,76 @@ class TicTacToeGame:
         for cell in self.state:
             if cell is not self.CELL_EMPTY:
                 self.turn = self.turn + 1
+
+    def get_winner(self):
+        """
+        If there is a winner, returns the player number, otherwise returns 0
+        """
+
+        # Horizontal
+        for row in range(3):
+            row_start = 3 * row
+            player = self.state[row_start]
+            if player == self.CELL_EMPTY:
+                continue
+            # Assume they win, try to disprove
+            is_winner = True
+            for col in range(1, 3):
+                if self.state[row_start + col] != player:
+                    is_winner = False
+                    break
+            if is_winner:
+                return player
+
+        # Vertical
+        for col in range(3):
+            player = self.state[col]
+            if player == self.CELL_EMPTY:
+                continue
+            # Assume they win, try to disprove
+            is_winner = True
+            for row in range(1, 3):
+                if self.state[col + 3 * row] != player:
+                    is_winner = False
+                    break
+            if is_winner:
+                return player
+
+        # Diagonal TL->BR
+        player = self.state[0]
+        if player is not self.CELL_EMPTY:
+            # Assume they win, try to disprove
+            is_winner = True
+            for index in [4, 8]:
+                if self.state[index] != player:
+                    is_winner = False
+                    break
+            if is_winner:
+                return player
+
+        # Diagonal TR->BL
+        player = self.state[2]
+        if player is not self.CELL_EMPTY:
+            # Assume they win, try to disprove
+            is_winner = True
+            for index in [4, 6]:
+                if self.state[index] != player:
+                    is_winner = False
+                    break
+            if is_winner:
+                return player
+
+        # Nobody wins
+        return 0
+
+    def is_over(self):
+        """
+        Returns true if the game is over
+        """
+        if len(self.get_valid_moves()) == 0:
+            return True
+
+        return self.get_winner() != 0
 
     def __repr__(self):
         """
@@ -92,3 +163,4 @@ class TicTacToeGame:
 
 if __name__ == "__main__":
     main()
+    
