@@ -66,11 +66,8 @@ class TicTacToeGame:
         Set the state of the board
         """
         self.state = state
-        # The turn number is the number of moves made
-        self.turn = 0
-        for cell in self.state:
-            if cell is not self.CELL_EMPTY:
-                self.turn = self.turn + 1
+        # The turn number is the number non-empty cells
+        self.turn = 9 - self.state.count(self.CELL_EMPTY)
 
     def get_winner(self):
         """
@@ -163,4 +160,3 @@ class TicTacToeGame:
 
 if __name__ == "__main__":
     main()
-    
