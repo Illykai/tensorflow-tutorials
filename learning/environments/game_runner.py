@@ -28,7 +28,7 @@ def generate_game_data(game, players, num_games, file_suffix):
     date_now = datetime.datetime.now()
     date_string = date_now.strftime("%Y_%m_%d_%H_%M_%S")
     filename = "%s_games_%d_%s.csv" % (date_string, num_games, file_suffix)
-    out_file = open(DATA_DIR + "/" + filename, "w")
+    out_file = open("%s/%s" % (DATA_DIR, filename), "w")
 
     game_runner = GameRunner(game, players)
     for count in range(num_games):
@@ -55,7 +55,7 @@ def generate_negamax_game_data():
     num_games = 1000
     game = TicTacToeGame()
     players = []
-    pickle_file = open(DATA_DIR + "/tic_tac_toe_game_tree.pkl", "rb")
+    pickle_file = open("%s/tic_tac_toe_game_tree.pkl" % DATA_DIR, "rb")
     game_tree = pickle.load(pickle_file)
     players.append(NegamaxPlayer(game_tree))
     players.append(RandomPlayer())
