@@ -75,5 +75,17 @@ class TestTicTacToeGame(unittest.TestCase):
         ttt.set_state(test_state)
         self.assertTrue(ttt.get_winner() == 2)
 
+def test_negamax_search():
+    game = TicTacToeGame()
+    # Handy test state for debugging
+    game.set_state([0, 1, 0,
+                    0, 0, 2,
+                    0, 0, 0])
+    action = get_negamax_action(game)
+    print("Game state:")
+    print(game)
+    print("negamax action: %d" % action)
+
+
 if __name__ == "__main__":
     unittest.main()
