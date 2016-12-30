@@ -38,10 +38,16 @@ class TicTacToeGame:
             return False
         else:
             # +1 because 0 is the empty cell code
-            player = self.turn % 2 + 1
+            player = self.get_active_player()
             self.state[action] = player
             self.turn = self.turn + 1
             return True
+
+    def get_active_player(self):
+        """
+        Return the player whose turn it is
+        """
+        return self.turn % 2 + 1
 
     def get_state(self):
         """
@@ -65,7 +71,7 @@ class TicTacToeGame:
         """
         Set the state of the board
         """
-        self.state = state
+        self.state = list(state)
         # The turn number is the number non-empty cells
         self.turn = 9 - self.state.count(self.CELL_EMPTY)
 
@@ -73,7 +79,6 @@ class TicTacToeGame:
         """
         If there is a winner, returns the player number, otherwise returns 0
         """
-
         # Horizontal
         for row in range(3):
             row_start = 3 * row
@@ -141,9 +146,16 @@ class TicTacToeGame:
 
     def __repr__(self):
         """
-        This isn't the most efficient way to do string concatenation, but at least it's clear
+        Returns the unindented stringification of the game state
         """
-        result = ""
+        return self.to_string(0)
+
+    def to_string(self, indent):
+        """
+        Stringify the game with indent spaces on each line
+        """
+        indentation = " " * indent
+        result = indentation
         for (index, cell) in enumerate(self.state):
             if cell == self.CELL_EMPTY:
                 result += str(index)
@@ -153,7 +165,7 @@ class TicTacToeGame:
                 result += "O"
             # Include a line break at the end of each row
             if index % 3 == 2:
-                result += "\n"
+                result += "\n" + indentation
         # Convert to human friendly turn number
         result += "Turn: %d" % (self.turn + 1)
         return result

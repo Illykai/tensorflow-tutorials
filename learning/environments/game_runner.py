@@ -4,27 +4,49 @@ Game running framework thing
 import random
 import datetime
 from learning.environments.tic_tac_toe import TicTacToeGame
+from learning.gametree.gametree import *
+
+DATA_DIR = "data"
 
 def main():
+    """Do the cool things"""
+    # generate_random_game_data()
+    generate_negamax_game_data()
+
+def generate_negamax_game_data():
     """
-    Entry point
+    Generate a bunch of data from random game players
     """
+    suffix = "_tic_tac_toe_negamax_vs_random_games_%d"
+    # Run games
+    game = TicTacToeGame()
+    players = []
+    game_tree = compute_game_tree(game, game.get_state())
+    players.append(NegamaxPlayer(game_tree))
+    players.append(RandomPlayer())
+    generate_game_data(game, players, suffix)
+
+def generate_random_game_data():
+    """
+    Generate a bunch of data from random game players
+    """
+    suffix = "_tic_tac_toe_random_vs_random_games_%d"
+    # Run games
+    game = TicTacToeGame()
+    players = []
+    players.append(RandomPlayer())
+    players.append(RandomPlayer())
+    generate_game_data(game, players, suffix)
+
+def generate_game_data(game, players, file_suffix):
     # Test params
     num_games = 10
-    data_dir = "data"
     date_now = datetime.datetime.now()
     date_string = date_now.strftime("%Y_%m_%d_%H_%M_%S")
-    filename = "%s_tic_tac_toe_random_vs_random_games_%d.csv" % (date_string, num_games)
-    out_file = open(data_dir + "/" + filename, "w")
+    filename = "%s_games_%d_%s.csv" % (date_string, num_games, file_suffix)
+    out_file = open(DATA_DIR + "/" + filename, "w")
 
-    # Run games
-    ttt_game = TicTacToeGame()
-    players = []
-    # players.append(HumanPlayer())
-    players.append(RandomPlayer())
-    players.append(RandomPlayer())
-    game_runner = GameRunner(ttt_game, players)
-
+    game_runner = GameRunner(game, players)
     for _ in range(num_games):
         states, actions, winner = game_runner.run_game()
         state_strings = [str(state) for state in states]
@@ -72,9 +94,6 @@ class Player:
     Generic player interface
     """
 
-    def __init__(self):
-        pass
-
     def get_action(self, game):
         """
         Get the player's move given the current game state
@@ -107,6 +126,37 @@ class RandomPlayer(Player):
 
     def get_action(self, game):
         return random.choice(game.get_valid_moves())
+
+class NegamaxPlayer(Player):
+    """
+    Optimal player that uses the minimax algorithm
+    """
+
+    def __init__(self, game_tree):
+        """
+        Set up a minimax Player
+
+        Args:
+            game_tree: The game tree for the game we're playing
+        """
+        self.game_tree = game_tree
+        # Build a big dictionary for lookup into our tree
+        self.state_to_node_dict = {}
+        stack = []
+        stack.append(game_tree)
+        while stack:
+            # Using the booleanity of pythonic lists
+            node = stack.pop()
+            self.state_to_node_dict[str(node.state)] = node
+            for _, child in node.children.items():
+                stack.append(child)
+
+    def get_action(self, game):
+        state = game.get_state()
+        node = self.state_to_node_dict[str(state)]
+        action, _ = negamax_search(game, node, True)
+        game.set_state(state)
+        return action
 
 if __name__ == "__main__":
     main()
