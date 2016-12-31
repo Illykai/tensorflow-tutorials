@@ -11,6 +11,7 @@ DATA_DIR = "data"
 
 def main():
     """Do the cool things"""
+    pass
     # generate_random_game_data()
     # generate_negamax_game_data()
     # generate_tic_tac_toe_game_tree_pickle_file()
