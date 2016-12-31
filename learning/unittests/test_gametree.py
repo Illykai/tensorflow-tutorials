@@ -3,7 +3,7 @@ Unit tests for gametree module
 """
 import unittest
 from learning.environments.tic_tac_toe import TicTacToeGame
-from learning.gametree.gametree import get_negamax_action
+from learning.players.search import get_negamax_action
 
 class TestTicTacToeGame(unittest.TestCase):
     """

@@ -1,9 +1,11 @@
 """
-Utilities for generating and searching game treess
+Players that use search to choose actions
 """
+
 import math
 import random
 import pickle
+from learning.players.basic import Player
 from learning.environments.tic_tac_toe import TicTacToeGame
 
 def main():
@@ -12,6 +14,61 @@ def main():
     """
     pass
     # generate_tic_tac_toe_game_tree()
+    
+class NegamaxPlayer(Player):
+    """
+    Optimal player that uses the negamax algorithm to select moves
+    """
+
+    def __init__(self, game_tree):
+        """
+        Set up a negamax Player
+
+        Args:
+            game_tree: The game tree for the game we're playing
+        """
+        self.game_tree = game_tree
+        # Build a big dictionary for lookup into our tree
+        self.state_to_node_dict = {}
+        stack = []
+        stack.append(game_tree)
+        while stack:
+            # Using the booleanity of pythonic lists
+            node = stack.pop()
+            self.state_to_node_dict[str(node.state)] = node
+            for _, child in node.children.items():
+                stack.append(child)
+
+    def get_action(self, game):
+        state = game.get_state()
+        node = self.state_to_node_dict[str(state)]
+        action, _ = negamax_search(game, node, True)
+        return action
+
+def generate_player_from_game(game):
+    """Generate a NegamaxPlayer from a Game and a starting state.
+
+    Assumes that the game will start in the state returned by game.get_state().
+
+    Args:
+        game: The game to be played
+    Returns:
+        A NegamaxPlayer for the game.
+    """
+    game_tree = generate_game_tree(game, game.get_state())
+    return NegamaxPlayer(game_tree)
+
+def generate_player_from_pickle_file(filename):
+    """Generate a NegamaxPlayer from the game tree stored in a pickle file.
+
+    Args:
+        filename: The full file path of the pickle file.
+    Returns:
+        A NegamaxPlayer for the game.
+    """
+    pickle_file = open(filename, "rb")
+    game_tree = pickle.load(pickle_file)
+    return NegamaxPlayer(game_tree)
 
 def generate_game_tree(game, root_state):
     """

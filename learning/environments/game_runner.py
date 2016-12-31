@@ -1,19 +1,19 @@
 """
 Game running framework thing
 """
-import random
 import datetime
 import pickle
 from learning.environments.tic_tac_toe import TicTacToeGame
-from learning.gametree.gametree import negamax_search
-from learning.gametree.gametree import GameTreeNode
+from learning.players.basic import RandomPlayer
+from learning.players import search
 
 DATA_DIR = "data"
 
 def main():
     """Do the cool things"""
     # generate_random_game_data()
-    generate_negamax_game_data()
+    # generate_negamax_game_data()
+    # generate_tic_tac_toe_game_tree_pickle_file()
 
 def generate_game_data(game, players, num_games, file_suffix):
     """Generates data from bots playing a game against each other
@@ -49,15 +49,24 @@ def generate_game_data(game, players, num_games, file_suffix):
         out_file.write(",".join(action_strings) + "\n")
         out_file.write(str(winner) + "\n")
 
+def generate_tic_tac_toe_game_tree_pickle_file():
+    """Generate a game tree pickle file for TicTacToe"""
+    game = TicTacToeGame()
+    pickle_filename = "%s/tic_tac_toe_game_tree.pkl" % DATA_DIR
+    pickle_file = open(pickle_filename, "wb")
+    game_tree = search.generate_game_tree(game, game.get_state())
+    pickle.dump(game_tree, pickle_file)
+    pickle_file.close()
+
 def generate_negamax_game_data():
     """Generate a bunch of data from an optimal negamax player beating on a random player"""
     suffix = "_tic_tac_toe_negamax_vs_random_games"
-    num_games = 1000
+    num_games = 1
     game = TicTacToeGame()
     players = []
-    pickle_file = open("%s/tic_tac_toe_game_tree.pkl" % DATA_DIR, "rb")
-    game_tree = pickle.load(pickle_file)
-    players.append(NegamaxPlayer(game_tree))
+    pickle_filename = "%s/tic_tac_toe_game_tree.pkl" % DATA_DIR
+    negamax_player = search.generate_player_from_pickle_file(pickle_filename)
+    players.append(negamax_player)
     players.append(RandomPlayer())
     generate_game_data(game, players, num_games, suffix)
 
@@ -104,74 +113,6 @@ class GameRunner:
             player_turn = player_turn % len(self.players)
 
         return (state_history, action_history, self.game.get_winner())
-
-class Player:
-    """
-    Generic player interface
-    """
-
-    def get_action(self, game):
-        """
-        Get the player's move given the current game state
-        """
-        return 0
-
-class HumanPlayer(Player):
-    """
-    A shell for humans to play that prompts for their actions
-    """
-
-    def get_action(self, game):
-        valid_moves = game.get_valid_moves()
-        valid_moves = [str(move) for move in valid_moves]
-        valid_moves.append("q")
-        command = ""
-        while command not in valid_moves:
-            print(game)
-            prompt = "Choose a move " + ", ".join(valid_moves) + ": "
-            command = input(prompt)
-            if command == "q":
-                quit()
-        move = int(command)
-        return move
-
-class NegamaxPlayer(Player):
-    """
-    Optimal player that uses the negamax algorithm to select moves
-    """
-
-    def __init__(self, game_tree):
-        """
-        Set up a negamax Player
-
-        Args:
-            game_tree: The game tree for the game we're playing
-        """
-        self.game_tree = game_tree
-        # Build a big dictionary for lookup into our tree
-        self.state_to_node_dict = {}
-        stack = []
-        stack.append(game_tree)
-        while stack:
-            # Using the booleanity of pythonic lists
-            node = stack.pop()
-            self.state_to_node_dict[str(node.state)] = node
-            for _, child in node.children.items():
-                stack.append(child)
-
-    def get_action(self, game):
-        state = game.get_state()
-        node = self.state_to_node_dict[str(state)]
-        action, _ = negamax_search(game, node, True)
-        return action
-
-class RandomPlayer(Player):
-    """
-    A random player
-    """
-
-    def get_action(self, game):
-        return random.choice(game.get_valid_moves())
 
 if __name__ == "__main__":
     main()
