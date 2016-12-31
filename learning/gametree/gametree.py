@@ -161,6 +161,5 @@ class GameTreeNode:
                 result = result + child.to_string(game, indent, level + 1)
         return result
 
-
 if __name__ == "__main__":
     main()

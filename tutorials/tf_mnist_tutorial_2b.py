@@ -7,24 +7,23 @@ import tensorflow as tf
 
 WEIGHT_STD_DEV = 0.1
 BIAS_DEFAULT = 0.1
-MAX_POOL_FIELD_SIZE = 2
 
 def main():
     """Main function"""
     print("Loading MNIST data")
-    mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+    mnist = input_data.read_data_sets("MNIST_data", one_hot=True)
     print("Data loaded")
 
     sess = tf.InteractiveSession()
 
-    ## Data specification
+    ### Data specification
     img_x = 28
     img_y = 28
     img_color_channels = 1 # greyscale images
     num_pixels = img_x * img_y
     num_classes = 10
 
-    ## Hyperparameters
+    ### Hyperparameters
     # Layer 1
     field_size_conv1 = 5
     num_features_conv1 = 32
@@ -37,83 +36,120 @@ def main():
     learning_rate = 1e-4
     max_steps = 20000
     batch_size = 50
-    dropout_keep_prob = 0.5
 
-    ## Variable definitions
+    ### Variable definitions
     # Inputs: pixel values x and class labels y_
-    x = tf.placeholder(tf.float32, shape=[None, num_pixels])
-    y_ = tf.placeholder(tf.float32, shape=[None, num_classes])
+    x = tf.placeholder(tf.float32, shape=[None, num_pixels], name="image")
+    y_ = tf.placeholder(tf.float32, shape=[None, num_classes], name="class")
+    x_image = tf.reshape(x, [-1, img_x, img_y, img_color_channels],
+                         name="reshape_to_square")
 
-    # Layer 1
-    W_conv1 = weight_variable([field_size_conv1, field_size_conv1, img_color_channels, num_features_conv1])
-    b_conv1 = bias_variable([num_features_conv1])
-
-    # Layer 2
-    W_conv2 = weight_variable([field_size_conv2, field_size_conv2, num_features_conv1, num_features_conv2])
-    b_conv2 = bias_variable([num_features_conv2])
-
-    # Layer 3
-    # We'll have gone through 2 lots of max pooling, which will have shrunk our dimensions
-    pooled_dims = int(img_x / 2 / 2)
-    input_dimension_conv3 = pooled_dims * pooled_dims * num_features_conv2
-    W_fc1 = weight_variable([input_dimension_conv3, num_features_fc1])
-    b_fc1 = bias_variable([num_features_fc1])
-
-    # Dropout probability vector (or rather its inverse)
-    keep_prob = tf.placeholder(tf.float32)
-
-    # Readout layer
-    W_fc2 = weight_variable([num_features_fc1, num_classes])
-    b_fc2 = bias_variable([num_classes])
-
-    ## Computation graph definitions
-
+    ### Computation graph
+    ## Layer 1 - Convolve -> ReLU -> MaxPool
     # Wrangling x into the correct dimensions (i.e. a 28x28 image)
-    x_image = tf.reshape(x, [-1, img_x, img_y, img_color_channels])
+    with tf.name_scope("conv_maxpool_layer_1"):
+        h_conv1 = nn_layer_conv(x_image, img_color_channels, field_size_conv1,
+                                num_features_conv1, "convolve")
+        h_pool1 = nn_layer_max_pool_2x2(h_conv1, "max_pool")
 
-    # Layer 1 - Convolve -> ReLU -> MaxPool
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-    h_pool1 = max_pool_2x2(h_conv1)
+    ## Layer 2 - Convolve -> ReLU -> MaxPool
+    with tf.name_scope("conv_maxpool_layer_2"):
+        h_conv2 = nn_layer_conv(h_pool1, num_features_conv1, field_size_conv2,
+                                num_features_conv2, "convolve")
+        h_pool2 = nn_layer_max_pool_2x2(h_conv2, "max_pool")
 
-    # Layer 2 - Convolve -> ReLU -> MaxPool
-    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-    h_pool2 = max_pool_2x2(h_conv2)
-
-    # Wrangling h_pool2 into the correct dimensions (a vector)
-    h_pool2_flat = tf.reshape(h_pool2, [-1, input_dimension_conv3])
-
-    # Layer 3 - Fully connected: Mutiply -> ReLU 
-    h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+    ## Layer 3 - Fully connected: Mutiply -> ReLU -> Dropout
+    # We"ll have gone through 2 lots of max pooling, which will have shrunk our
+    # dimensions and need to wrangle the output of the conv layers into the
+    # correct shape
+    pooled_dims = int(img_x / 2 / 2)
+    input_dimension_fc1 = pooled_dims * pooled_dims * num_features_conv2
+    h_pool2_flat = tf.reshape(h_pool2, [-1, input_dimension_fc1],
+                              name="flatten_to_vector")
+    h_fc = nn_layer_fc(h_pool2_flat, input_dimension_fc1, num_features_fc1,
+                       "fc_layer_1")
 
     # Dropout for overfitting reduction
-    h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+    with tf.name_scope("dropout"):
+        keep_prob = tf.placeholder(tf.float32)
+        tf.summary.scalar("dropout_keep_probability", keep_prob)
+        dropped = tf.nn.dropout(h_fc, keep_prob)
 
-    # Readout layer - Scores are unnormalize log probabilites
-    y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
+    ## Layer 4 - Readout layer - Fully connected: Multiply only
+    # Scores are unnormalize log probabilites
+    y_conv = nn_layer_fc(dropped, num_features_fc1, num_classes, "fc_layer_2",
+                         act=tf.identity)
 
     # Cross-entropy loss function
-    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(y_conv, y_))
-    # Optimization step
-    train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
+    with tf.name_scope("cross_entropy"):
+        diff = tf.nn.softmax_cross_entropy_with_logits(y_conv, y_)
+        with tf.name_scope("total"):
+            cross_entropy = tf.reduce_mean(diff)
+    tf.summary.scalar("cross_entropy", cross_entropy)
 
-    # Model is considered correct if it gives true class the highest probability
-    # Note that this is actually represented as unnormalized log probability
-    correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
-    # Convert from bools to floats and take the mean to get the accuracy
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    ## Optimization step
+    with tf.name_scope("train"):
+        optimizer = tf.train.AdamOptimizer(learning_rate)
+        train_step = optimizer.minimize(cross_entropy)
+
+    with tf.name_scope("accuracy"):
+        # Model is considered correct if it gives true class the highest probability
+        # Note that this is actually represented as unnormalized log probability
+        with tf.name_scope("correct_prediction"):
+            correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
+        # Convert from bools to floats and take the mean to get the accuracy
+        with tf.name_scope("accuracy"):
+            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        tf.summary.scalar("accuracy", accuracy)
+
+    ### Training
+
+    # Merge summary statistics
+    merged = tf.summary.merge_all()
+    train_writer = tf.summary.FileWriter("data/train", sess.graph)
+    test_writer = tf.summary.FileWriter("data/test")
+
+    def feed_dict(batch_size, train):
+        # Gonna use this to fill up the feed 
+        if train:
+            xs, ys = mnist.train.next_batch(batch_size)
+            k = 0.5
+        else:
+            xs, ys = mnist.test.images, mnist.test.labels
+            k = 1.0
+        result = {x: xs, y_: ys, keep_prob: k}
+        return result
 
     # Do the optimization
     sess.run(tf.global_variables_initializer())
     for i in range(max_steps):
         # Grab the next batch of training examples
-        batch = mnist.train.next_batch(batch_size)
-        if i % 100 == 0:
-            train_accuracy = accuracy.eval(feed_dict={x: batch[0], y_: batch[1], keep_prob: 1.0})
-            print("Step %d, training accuracy %g" % (i, train_accuracy))
+        if i % 10 == 0:
+            feed = feed_dict(batch_size, False)
+            summary, acc = sess.run([merged, accuracy], feed_dict=feed)
+            test_writer.add_summary(summary, i)
+            print("Step %d, training accuracy %g" % (i, acc))
         # Bind the placeholders we defined to the batch data loaded and do a step
-        train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: dropout_keep_prob})
+        else:
+            if i % 100 == 99:
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+                feed = feed_dict(batch_size, True)
+                summary, _ = sess.run([merged, train_step],
+                                      feed_dict=feed,
+                                      options=run_options,
+                                      run_metadata=run_metadata)
+                train_writer.add_run_metadata(run_metadata, "step%d" % i)
+                train_writer.add_summary(summary, i)
+            else:
+                feed = feed_dict(batch_size, True)
+                summary, _ = sess.run([merged, train_step], feed_dict=feed)
+                train_writer.add_summary(summary, i)
 
-    print("Final test accuracy: %g" % accuracy.eval(feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
+    feed = feed_dict(batch_size, False)
+    summary, acc = sess.run([merged, accuracy], feed_dict=feed)
+    test_writer.add_summary(summary, max_steps)
+    print("Final test accuracy: %g" % acc)
 
     print("Done")
 
@@ -137,13 +173,69 @@ def conv2d(x, W):
     Peform a 2d convolution with stride 1 and zero padding to make the output the size
     of the input.
     """
-    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding="SAME")
 
-def max_pool_2x2(x):
+def variable_summaries(var):
+    """
+    Attach a summary statistics handle to a variable
+    """
+    with tf.name_scope("summaries"):
+        mean = tf.reduce_mean(var)
+        tf.summary.scalar("mean", mean)
+        with tf.name_scope("stddev"):
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+            tf.summary.scalar("stddev", stddev)
+        tf.summary.scalar("max", tf.reduce_max(var))
+        tf.summary.scalar("min", tf.reduce_min(var))
+        tf.summary.histogram("histogram", var)
+
+def nn_layer_fc(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
+    """Helper for making a simple fully connected neural net layer
+
+    Does matrix multiply, bias add, and relu. Also sets up handy name scoping.
+    """
+    with tf.name_scope(layer_name):
+        with tf.name_scope("weights"):
+            weights = weight_variable([input_dim, output_dim])
+            variable_summaries(weights)
+        with tf.name_scope("biases"):
+            biases = bias_variable([output_dim])
+            variable_summaries(biases)
+        with tf.name_scope("Wx_plus_b"):
+            preactivate = tf.matmul(input_tensor, weights) + biases
+            tf.summary.histogram("pre_activations", preactivate)
+        activations = act(preactivate, name="activation")
+        tf.summary.histogram("activations", activations)
+    return activations
+
+def nn_layer_conv(input_tensor, input_dim, filter_dim, output_dim, layer_name, act=tf.nn.relu):
+    """Helper for making a convolutional neural net layer
+
+    Does convolution, bias add, relu, and max_pool. Also sets up handy name scoping.
+    """
+    with tf.name_scope(layer_name):
+        with tf.name_scope("weights"):
+            weights = weight_variable([filter_dim, filter_dim, input_dim, output_dim])
+            variable_summaries(weights)
+        with tf.name_scope("biases"):
+            biases = bias_variable([output_dim])
+            variable_summaries(biases)
+        with tf.name_scope("x_conv_W_plus_b"):
+            preactivate = conv2d(input_tensor, weights) + biases
+            tf.summary.histogram("pre_activations", preactivate)
+        activations = act(preactivate, name="activation")
+        tf.summary.histogram("activations", activations)
+
+    return activations
+
+def nn_layer_max_pool_2x2(x, layer_name):
     """
     Perform max pooling over blocks of x.
     """
-    return tf.nn.max_pool(x, ksize=[1, MAX_POOL_FIELD_SIZE, MAX_POOL_FIELD_SIZE, 1], strides=[1, MAX_POOL_FIELD_SIZE, MAX_POOL_FIELD_SIZE, 1], padding='SAME')
+    with tf.name_scope(layer_name):
+        pool = tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
+        tf.summary.histogram("pool activations", pool)
+    return pool
 
 if __name__ == "__main__":
     main()
