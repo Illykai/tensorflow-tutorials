@@ -87,29 +87,6 @@ def generate_game_tree(game, root_state):
 
     return root
 
-def generate_tic_tac_toe_game_tree():
-    """
-    Generate a full game tree for tic tac toe
-    """
-    out_file = open("data/tic_tac_toe_game_tree.txt", "w")
-    game = TicTacToeGame()
-    # # Handy test state for debugging
-    # game.set_state([1, 2, 1,
-    #                 0, 2, 2,
-    #                 0, 1, 1])
-    root = generate_game_tree(game, game.get_state())
-    tree_string = root.to_string(game, 4, 0)
-    out_file.write("Tree size: %d\n" % root.get_tree_size())
-    out_file.write("Max tree depth: %d\n" % root.get_max_tree_depth())
-    out_file.write("Leaf nodes: %d\n" % root.get_leaf_count())
-    out_file.write("Full tree:\n")
-    out_file.write(tree_string)
-    out_file.close()
-
-    pickle_file = open("data/tic_tac_toe_game_tree.pkl", "wb")
-    pickle.dump(root, pickle_file)
-    pickle_file.close()
-
 def get_negamax_action(game):
     """
     Return the infinite depth negamax action!
@@ -118,7 +95,6 @@ def get_negamax_action(game):
     root = generate_game_tree(game, state)
     player = game.get_active_player()
     action, value = negamax_search(game, root, player)
-    print("Value %d:" %value)
     return action
 
 def negamax_search(game, node, player):
