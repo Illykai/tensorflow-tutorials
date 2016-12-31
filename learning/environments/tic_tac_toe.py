@@ -220,8 +220,8 @@ class TicTacToeGame:
                 result += "X"
             elif cell == self.CELL_P2:
                 result += "O"
-            # Include a line break at the end of each row
-            if index % 3 == 2:
+            # Include a line break at the end of the first two rows
+            if index == 2 or index == 5:
                 result += "\n" + indentation
         return result
 
@@ -231,7 +231,7 @@ class TicTacToeGame:
         Returns:
             The stringified internal state
         """
-        result = self.state_to_string(self.state, 0)
+        result = "%s\n" % self.state_to_string(self.state, 0)
         # Convert to human friendly turn number
         result += "Turn: %d" % (self.turn + 1)
         return result

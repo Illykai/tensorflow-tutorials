@@ -60,37 +60,48 @@ class DummyNetwork:
 
 # Data wrangling
 def load_training_data():
+    """Load data from the random player games"""
     # Hard coding filenames for now
     states = []
+    actions = []
     winners = []
-    with open("data/2016_12_28_21_25_00_tic_tac_toe_random_vs_random_games_1000.csv",
-              "r") as random_game_file:
+    filename = "data/2016_12_28_21_25_00_tic_tac_toe_random_vs_random_games_1000.csv"
+    with open(filename, "r") as random_game_file:
         reader = csv.reader(random_game_file, delimiter=",", quotechar='"')
         count = 0
-        history = []
+        state_history = []
         winner = []
         for row in reader:
             if count == 0:
-                history = row
+                state_history = row
             elif count == 1:
-                # This is a final state. Ignore it - should already be in history.
-                pass
+                action_history = row
             else:
                 winner = int(row[0])
                 one_hot_winner_array = numpy.zeros(3, dtype=numpy.uint8)
                 one_hot_winner_array[winner] = 1
-                for state in history:
+                action_history = [int(action) for action in action_history]
+                action_history.append(9)
+                for index, state in enumerate(state_history):
                     state = state[1:-1]
                     numbers = state.split(", ")
                     numbers = [int(num) for num in numbers]
                     state_array = numpy.array(numbers, dtype=numpy.uint8)
+                    one_hot_action_array = numpy.zeros(10, dtype=numpy.uint8)
+                    one_hot_action_array[action_history[index]] = 1
                     states.append(state_array)
+                    actions.append(one_hot_action_array)
                     winners.append(one_hot_winner_array)
+
             count = (count + 1) % 3
         state_array = numpy.array(states)
+        action_array = numpy.array(actions)
         winner_array = numpy.array(winners)
+        print("Data loaded from %s: " % filename)
         print("State array - Shape %s - Type %s "
               % (str(state_array.shape), str(state_array.dtype)))
+        print("Action array - Shape %s - Type %s "
+              % (str(action_array.shape), str(action_array.dtype)))
         print("Winner array - Shape %s - Type %s "
               % (str(winner_array.shape), str(winner_array.dtype)))
         return (state_array, winner_array)
