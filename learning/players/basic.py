@@ -15,6 +15,12 @@ class Player:
         """
         return 0
 
+    def get_name(self):
+        """
+        Get the player's name
+        """
+        return "player"
+
 class HumanPlayer(Player):
     """
     A shell for humans to play that prompts for their actions
@@ -34,6 +40,12 @@ class HumanPlayer(Player):
         move = int(command)
         return move
 
+    def get_name(self):
+        """
+        Get the player's name
+        """
+        return "human_player"
+
 class RandomPlayer(Player):
     """
     A random player
@@ -41,3 +53,9 @@ class RandomPlayer(Player):
 
     def get_action(self, game):
         return random.choice(game.get_valid_moves())
+
+    def get_name(self):
+        """
+        Get the player's name
+        """
+        return "random_player"

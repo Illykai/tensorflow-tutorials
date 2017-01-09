@@ -11,7 +11,14 @@ DATA_DIR = "data"
 
 def main():
     """Do the cool things"""
-    pass
+    num_games = 1000
+    game = TicTacToeGame()
+    players = []
+    players.append(RandomPlayer())
+    players.append(RandomPlayer())
+    runner = GameRunner(game, players)
+    runner.run_tournament(num_games)
+
     # generate_random_game_data()
     # generate_negamax_game_data()
     # generate_tic_tac_toe_game_tree_pickle_file()
@@ -114,6 +121,27 @@ class GameRunner:
             player_turn = player_turn % len(self.players)
 
         return (state_history, action_history, self.game.get_winner())
+
+    def run_tournament(self, num_games):
+        """
+        Run a num_games round tournament
+        """
+        date_now = datetime.datetime.now()
+        date_string = date_now.strftime("%Y_%m_%d_%H_%M_%S")
+        player_names = [player.get_name() for player in self.players]
+        names_string = "_vs_".join(player_names)
+        filename = "%s_%s_games_%d.csv" % (date_string, names_string, num_games)
+        with open("%s/%s" % (DATA_DIR, filename), "w") as out_file:
+            wins = [0] * (len(self.players) + 1)
+            for _ in range(num_games):
+                _, _, winner = self.run_game()
+                wins[winner] += 1
+            player_names = ["draw"] + player_names
+            out_file.write(",".join(player_names) + "\n")
+            wins_string = [str(num) for num in wins]
+            out_file.write(",".join(wins_string) + "\n")
+            percents_string = [str(num/num_games) for num in wins]
+            out_file.write(",".join(percents_string) + "\n")
 
 if __name__ == "__main__":
     main()

@@ -69,6 +69,12 @@ class WinPredictionPlayer(Player):
                 best_actions.append(action)
         return random.choice(best_actions)
 
+    def get_name(self):
+        """
+        Get the player's name
+        """
+        return "win_prediction_player"
+
 class DummyNetwork:
     """"
     Just a stub network for testing

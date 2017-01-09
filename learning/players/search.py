@@ -45,6 +45,12 @@ class NegamaxPlayer(Player):
         action, _ = negamax_search(game, node, True)
         return action
 
+    def get_name(self):
+        """
+        Get the player's name
+        """
+        return "negamax_player"
+
 def generate_player_from_game(game):
     """Generate a NegamaxPlayer from a Game and a starting state.
 
