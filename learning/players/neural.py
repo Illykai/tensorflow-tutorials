@@ -14,6 +14,8 @@ from learning.players.basic import Player
 DataSets = collections.namedtuple('Datasets', ['train', 'validation', 'test'])
 WEIGHT_STD_DEV = 0.1
 BIAS_DEFAULT = 0.1
+WEIGHT_DECAY = 0.0025
+# WEIGHT_DECAY = 0.005
 
 def main():
     """Handy entry point for testing"""
@@ -336,12 +338,17 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
         diff = tf.nn.softmax_cross_entropy_with_logits(y_conv, y_)
         with tf.name_scope("total"):
             cross_entropy = tf.reduce_mean(diff)
+            tf.add_to_collection("losses", cross_entropy)
     tf.summary.scalar("cross_entropy", cross_entropy)
+
+    with tf.name_scope("total_loss"):
+        total_loss = tf.add_n(tf.get_collection("losses"), "total_loss")
+    tf.summary.scalar("total_loss", total_loss)
 
     ## Optimization step
     with tf.name_scope("train"):
         optimizer = tf.train.AdamOptimizer(learning_rate)
-        train_step = optimizer.minimize(cross_entropy)
+        train_step = optimizer.minimize(total_loss)
 
     ### Training
 
@@ -414,7 +421,10 @@ def bias_variable(shape):
     Initialize a tensor of biases to 0.1
     """
     initial = tf.constant(BIAS_DEFAULT, shape=shape)
-    return tf.Variable(initial)
+    var = tf.Variable(initial)
+    weight_decay = tf.mul(tf.nn.l2_loss(var), WEIGHT_DECAY, name='weight_loss')
+    tf.add_to_collection("losses", weight_decay)
+    return var
 
 def weight_variable(shape):
     """
@@ -422,7 +432,10 @@ def weight_variable(shape):
     0.1 standard deviation Gaussian.
     """
     initial = tf.truncated_normal(shape, stddev=WEIGHT_STD_DEV)
-    return tf.Variable(initial)
+    var = tf.Variable(initial)
+    weight_decay = tf.mul(tf.nn.l2_loss(var), WEIGHT_DECAY, name='weight_loss')
+    tf.add_to_collection("losses", weight_decay)
+    return var
 
 def conv2d(x, W):
     """
