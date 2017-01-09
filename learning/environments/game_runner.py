@@ -62,7 +62,7 @@ def generate_tic_tac_toe_game_tree_pickle_file():
 def generate_negamax_game_data():
     """Generate a bunch of data from an optimal negamax player beating on a random player"""
     suffix = "_tic_tac_toe_negamax_vs_random_games"
-    num_games = 1
+    num_games = 10000
     game = TicTacToeGame()
     players = []
     pickle_filename = "%s/tic_tac_toe_game_tree.pkl" % DATA_DIR

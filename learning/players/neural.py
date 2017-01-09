@@ -19,11 +19,17 @@ def main():
     """Handy entry point for testing"""
     test_percent = 0.2
     train_percent = 0.6
+    label_type = LabelType.winner
+    # label_type = LabelType.action
     filename = "data/2016_12_28_21_25_00_tic_tac_toe_random_vs_random_games_1000.csv"
-    data_sets = read_data_sets(filename, test_percent, train_percent,
-                               LabelType.winner)
+    # filename = "data/2017_01_04_09_02_51_games_10000__tic_tac_toe_negamax_vs_random_games.csv"
+    data_sets = read_data_sets(filename, test_percent, train_percent, label_type)
     restore_filename = None
-    save_filename = "data/random_vs_random.ckpt"
+    # restore_filename = "data/random_vs_random.ckpt"
+    # restore_filename = "data/negamax_vs_random.ckpt"
+    save_filename = None
+    # save_filename = "data/random_vs_random.ckpt"
+    # save_filename = "data/negamax_vs_random.ckpt"
     train_neural_net(data_sets, restore_filename, save_filename)
 
 def generate_win_prediction_player_from_dummy():
@@ -88,7 +94,7 @@ class DataSet(object):
         self.labels = labels
         self.epochs_completed = 0
         self.index_in_epoch = 0
-  
+
     def next_batch(self, batch_size):
         """Return the next `batch_size` examples from this data set."""
         start = self.index_in_epoch
@@ -113,14 +119,21 @@ class LabelType(enum.Enum):
     winner = 0
     action = 1
 
+class DataSplit(enum.Enum):
+    """LabelType enumeration"""
+    train = 0
+    validation = 1
+    test = 2
+
 def read_data_sets(filename,
                    test_percent,
                    train_percent,
                    label_type):
-    """Load data from the random player games"""
-    state_dict = {}
-    # actions = []
-    # winners = []
+    """Load data from the games"""
+
+    # Generate parallel arrays of states and labels. We keep the states in 
+    states = []
+    labels = []
     with open(filename, "r") as data_file:
         reader = csv.reader(data_file, delimiter=",", quotechar='"')
         count = 0
@@ -135,38 +148,30 @@ def read_data_sets(filename,
                 winner = int(row[0])
                 one_hot_winner_array = numpy.zeros(3, dtype=numpy.uint8)
                 one_hot_winner_array[winner] = 1
+                # Insert a dummy action for the final move so every states
+                # has an action associated with it
                 action_history = [int(action) for action in action_history]
                 action_history.append(9)
+                # Label every state in the game
                 for index, state in enumerate(state_history):
-                    state = state[1:-1]
+                    # Wrangle the state string into a numpy array
+                    state_string = state[1:-1]
+                    state_ints = state_string.split(", ")
+                    state_ints = [int(num) for num in state_ints]
+                    states.append(numpy.array(state_ints, dtype=numpy.uint8))
+
                     one_hot_action_array = numpy.zeros(10, dtype=numpy.uint8)
                     one_hot_action_array[action_history[index]] = 1
 
-                    # A bit of wasted work here...
+                    # We did a bit of work we didn't need to. Blah.
                     if label_type == LabelType.winner:
                         label_array = one_hot_winner_array
                     else:
                         label_array = one_hot_action_array
 
-                    if state not in state_dict:
-                        state_dict[state] = label_array
-                    else:
-                        total_array = state_dict[state]
-                        total_array = total_array + label_array
-                        state_dict[state] = total_array
+                    labels.append(label_array)
 
             count = (count + 1) % 3
-
-    states = []
-    labels = []
-    for state_string, label_array in state_dict.items():
-        numbers = state_string.split(", ")
-        numbers = [int(num) for num in numbers]
-        states.append(numpy.array(numbers, dtype=numpy.uint8))
-        label_sum = label_array.sum()
-        if label_sum > 1:
-            label_array = label_array / label_array.sum()
-        labels.append(label_array)
 
     states_array = numpy.array(states)
     labels_array = numpy.array(labels)
@@ -182,9 +187,10 @@ def read_data_sets(filename,
     states_array = states_array[perm]
     labels_array = labels_array[perm]
 
+    # Compute the sizes of the partitions
     data_size = states_array.shape[0]
     train_size = int(math.floor(data_size * train_percent))
-    test_size = int(math.floor(data_size * train_percent))
+    test_size = int(math.floor(data_size * test_percent))
     validation_size = data_size - train_size - test_size
 
     # Make sure the partition sizes are valid
@@ -197,10 +203,58 @@ def read_data_sets(filename,
     validation_labels = labels_array[test_size:(test_size + validation_size)]
     train_states = states_array[-train_size:]
     train_labels = labels_array[-train_size:]
+
+    # Convert the test and validation data into distributions
+    test_states, test_labels = generate_state_label_distribution(test_states,
+                                                                 test_labels)
+    validation_states, validation_labels = generate_state_label_distribution(
+        validation_states, validation_labels)
+
+    print("Final data sizes:")
+    print("Train:    %s" % str(train_states.shape))
+    print("Test:     %s" % str(test_states.shape))
+    print("Validate: %s" % str(validation_states.shape))
+
     train = DataSet(train_states, train_labels)
     validation = DataSet(validation_states, validation_labels)
     test = DataSet(test_states, test_labels)
     return DataSets(train=train, validation=validation, test=test)
+
+def generate_state_label_distribution(states, labels):
+    """Compute the distribution over labels for each state"""
+    # Convert the test and validation data into distributions
+    state_dict = {}
+
+    # Build the un-normalized distributions
+    index = 0
+    for state in states:
+        # Convert the state into a dictionary key
+        state_string = str(state)
+        label = labels[index]
+
+        # Labels are 1-hot, so we can just sum them up
+        if state_string not in state_dict:
+            state_dict[state_string] = label
+        else:
+            total_labels = state_dict[state_string]
+            total_labels += label
+            state_dict[state_string] = total_labels
+        index += 1
+
+    # Normalize the distributions
+    dist_states = []
+    dist_labels = []
+    for state_string, label_array in state_dict.items():
+        # Strip the brackets off "[x y z]" and convert back to a numpy array
+        state_string = state_string[1:-1]
+        dist_states.append(numpy.fromstring(state_string, sep=" ", dtype=numpy.uint8))
+        label_sum = label_array.sum()
+        if label_sum > 1:
+            label_array = label_array / label_sum
+        dist_labels.append(label_array)
+
+    return numpy.array(dist_states), numpy.array(dist_labels)
+
 
 def train_neural_net(data, restore_filename=None, save_filename=None):
     """Main function"""
@@ -212,7 +266,8 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
     img_color_channels = 1 # greyscale images
     num_pixels = img_x * img_y
     num_classes = 3
-
+    # num_classes = 10
+    
     ### Hyperparameters
     # Layer 1
     field_size_conv1 = 2
@@ -227,7 +282,8 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
     num_features_fc1 = 512
     # Training
     learning_rate = 1e-4 * 10
-    max_steps = 20000 * 2
+    # max_steps = 20000 * 2
+    max_steps = 10000
     batch_size = 50
 
     ### Variable definitions
@@ -287,16 +343,6 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
         optimizer = tf.train.AdamOptimizer(learning_rate)
         train_step = optimizer.minimize(cross_entropy)
 
-    with tf.name_scope("accuracy"):
-        # Model is considered correct if it gives true class the highest probability
-        # Note that this is actually represented as unnormalized log probability
-        with tf.name_scope("correct_prediction"):
-            correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
-        # Convert from bools to floats and take the mean to get the accuracy
-        with tf.name_scope("accuracy"):
-            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-        tf.summary.scalar("accuracy", accuracy)
-
     ### Training
 
     # Merge summary statistics
@@ -304,14 +350,18 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
     train_writer = tf.summary.FileWriter("data/train_ttt", sess.graph)
     test_writer = tf.summary.FileWriter("data/test_ttt")
 
-    def feed_dict(batch_size, train):
+    def feed_dict(batch_size, data_split, use_dropout):
         # Gonna use this to fill up the feed 
-        if train:
+        if data_split == DataSplit.train:
             xs, ys = data.train.next_batch(batch_size)
-            k = 0.5
-        else:
+        elif data_split == DataSplit.test:
             xs, ys = data.test.states, data.test.labels
-            k = 1.0
+        elif data_split == DataSplit.validation:
+            xs, ys = data.validation.states, data.validation.labels
+        else:
+            # We messed up!
+            pass
+        k = 0.5 if use_dropout else 1.0
         result = {x: xs, y_: ys, keep_prob: k}
         return result
 
@@ -323,17 +373,20 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
  
     for i in range(max_steps):
         # Grab the next batch of training examples
-        if i % 10 == 0:
-            feed = feed_dict(batch_size, False)
-            summary, acc = sess.run([merged, accuracy], feed_dict=feed)
+        if i % 100 == 0:
+            feed = feed_dict(batch_size, DataSplit.validation, False)
+            summary, entropy = sess.run([merged, cross_entropy], feed_dict=feed)
             test_writer.add_summary(summary, i)
-            print("Step %d, training accuracy %g" % (i, acc))
-        # Bind the placeholders we defined to the batch data loaded and do a step
+            print("Step %d, validation cross entropy %g" % (i, entropy))
+            feed = feed_dict(batch_size, DataSplit.train, False)
+            entropy = sess.run(cross_entropy, feed_dict=feed)
+            print("Step %d, training cross entropy %g" % (i, entropy))            
         else:
             if i % 100 == 99:
+                # Write out summary statistics about the training
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
-                feed = feed_dict(batch_size, True)
+                feed = feed_dict(batch_size, DataSplit.train, True)
                 summary, _ = sess.run([merged, train_step],
                                       feed_dict=feed,
                                       options=run_options,
@@ -341,17 +394,20 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
                 train_writer.add_run_metadata(run_metadata, "step%d" % i)
                 train_writer.add_summary(summary, i)
             else:
-                feed = feed_dict(batch_size, True)
+                # Just do a regular step
+                feed = feed_dict(batch_size, DataSplit.train, True)
                 summary, _ = sess.run([merged, train_step], feed_dict=feed)
                 train_writer.add_summary(summary, i)
         if i % 1000 == 0:
+            # Save off a checkpoint
             if save_filename is not None:
                 saver.save(sess, save_filename)
 
-    feed = feed_dict(batch_size, False)
-    summary, acc = sess.run([merged, accuracy], feed_dict=feed)
+    # Test against the full test set
+    feed = feed_dict(data.train.num_examples, DataSplit.test, False)
+    summary, entropy = sess.run([merged, cross_entropy], feed_dict=feed)
     test_writer.add_summary(summary, max_steps)
-    print("Final test accuracy: %g" % acc)
+    print("Final test cross entropy: %g" % entropy)
 
 def bias_variable(shape):
     """
