@@ -23,14 +23,14 @@ def main():
     train_percent = 0.6
     label_type = LabelType.winner
     # label_type = LabelType.action
-    filename = "data/2016_12_28_21_25_00_tic_tac_toe_random_vs_random_games_1000.csv"
+    filename = "data/2017_01_09_00_03_41_games_10000__tic_tac_toe_random_vs_random_games.csv"
     # filename = "data/2017_01_04_09_02_51_games_10000__tic_tac_toe_negamax_vs_random_games.csv"
     data_sets = read_data_sets(filename, test_percent, train_percent, label_type)
-    restore_filename = None
-    # restore_filename = "data/random_vs_random.ckpt"
+    # restore_filename = None
+    restore_filename = "data/random_vs_random.ckpt"
     # restore_filename = "data/negamax_vs_random.ckpt"
     save_filename = None
-    # save_filename = "data/random_vs_random.ckpt"
+    save_filename = "data/random_vs_random.ckpt"
     # save_filename = "data/negamax_vs_random.ckpt"
     train_neural_net(data_sets, restore_filename, save_filename)
 
@@ -289,9 +289,9 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
     # Layer 4
     num_features_fc1 = 512
     # Training
-    learning_rate = 1e-4 * 10
-    # max_steps = 20000 * 2
-    max_steps = 10000
+    learning_rate = 1e-4
+    max_steps = 20000 * 2
+    # max_steps = 10000
     batch_size = 50
 
     ### Variable definitions

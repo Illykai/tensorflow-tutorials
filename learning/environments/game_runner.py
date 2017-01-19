@@ -11,15 +11,15 @@ DATA_DIR = "data"
 
 def main():
     """Do the cool things"""
-    num_games = 1000
-    game = TicTacToeGame()
-    players = []
-    players.append(RandomPlayer())
-    players.append(RandomPlayer())
-    runner = GameRunner(game, players)
-    runner.run_tournament(num_games)
+    # num_games = 100000
+    # game = TicTacToeGame()
+    # players = []
+    # players.append(RandomPlayer())
+    # players.append(RandomPlayer())
+    # runner = GameRunner(game, players)
+    # runner.run_tournament(num_games)
 
-    # generate_random_game_data()
+    generate_random_game_data()
     # generate_negamax_game_data()
     # generate_tic_tac_toe_game_tree_pickle_file()
 
@@ -81,7 +81,7 @@ def generate_negamax_game_data():
 def generate_random_game_data():
     """Generate a bunch of data from random game players"""
     suffix = "_tic_tac_toe_random_vs_random_games"
-    num_games = 1000
+    num_games = 10000
     game = TicTacToeGame()
     players = []
     players.append(RandomPlayer())
