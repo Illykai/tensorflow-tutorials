@@ -19,20 +19,23 @@ WEIGHT_DECAY = 0.0025
 
 def main():
     """Handy entry point for testing"""
+    print("Running...")
     test_percent = 0.2
     train_percent = 0.6
     label_type = LabelType.winner
     # label_type = LabelType.action
-    filename = "data/2017_01_09_00_03_41_games_10000__tic_tac_toe_random_vs_random_games.csv"
-    # filename = "data/2017_01_04_09_02_51_games_10000__tic_tac_toe_negamax_vs_random_games.csv"
+    filename = "data/2017_02_12_21_31_45_games_10000__tic_tac_toe_random_vs_random_games.csv"
+    # filename = "data/2017_02_12_21_32_34_games_10000__tic_tac_toe_negamax_vs_random_games.csv"
     data_sets = read_data_sets(filename, test_percent, train_percent, label_type)
-    # restore_filename = None
-    restore_filename = "data/random_vs_random.ckpt"
+    restore_filename = None
+    # restore_filename = "data/random_vs_random.ckpt"
     # restore_filename = "data/negamax_vs_random.ckpt"
-    save_filename = None
+    # save_filename = None
     save_filename = "data/random_vs_random.ckpt"
     # save_filename = "data/negamax_vs_random.ckpt"
-    train_neural_net(data_sets, restore_filename, save_filename)
+    network = TicTacToeNet(restore_filename)
+    train_neural_net(data_sets, network, save_filename)
+    print("Complete")
 
 def generate_win_prediction_player_from_dummy():
     """Make a dummy player for testing"""
@@ -263,105 +266,140 @@ def generate_state_label_distribution(states, labels):
 
     return numpy.array(dist_states), numpy.array(dist_labels)
 
+class TicTacToeNet:
+    """TicTacToe convolutional neural net"""
 
-def train_neural_net(data, restore_filename=None, save_filename=None):
-    """Main function"""
-    sess = tf.InteractiveSession()
+    def __init__(self, restore_filename=None):
+        self.sess = tf.InteractiveSession()
 
-    ### Data specification
-    img_x = 3
-    img_y = 3
-    img_color_channels = 1 # greyscale images
-    num_pixels = img_x * img_y
-    num_classes = 3
-    # num_classes = 10
-    
-    ### Hyperparameters
-    # Layer 1
-    field_size_conv1 = 2
-    num_features_conv1 = 64
-    # Layer 2
-    field_size_conv2 = 2
-    num_features_conv2 = 64
-    # Layer 3
-    field_size_conv3 = 2
-    num_features_conv3 = 64
-    # Layer 4
-    num_features_fc1 = 512
-    # Training
-    learning_rate = 1e-4
+        ### Data specification
+        img_x = 3
+        img_y = 3
+        img_color_channels = 1 # greyscale images
+        num_pixels = img_x * img_y
+        num_classes = 3
+        # num_classes = 10
+        
+        ### Hyperparameters
+        # Layer 1
+        field_size_conv1 = 2
+        num_features_conv1 = 64
+        # Layer 2
+        field_size_conv2 = 2
+        num_features_conv2 = 64
+        # Layer 3
+        field_size_conv3 = 2
+        num_features_conv3 = 64
+        # Layer 4
+        num_features_fc1 = 512
+        # Training
+        learning_rate = 1e-4
+
+        ### Variable definitions
+        # Inputs: pixel values x and class labels y_
+        x = tf.placeholder(tf.float32, shape=[None, num_pixels], name="image")
+        y_ = tf.placeholder(tf.float32, shape=[None, num_classes], name="class")
+        x_image = tf.reshape(x, [-1, img_x, img_y, img_color_channels],
+                            name="reshape_to_square")
+
+        ### Computation graph
+        ## Layer 1 - Convolve -> ReLU
+        # Wrangling x into the correct dimensions (i.e. a 28x28 image)
+        with tf.name_scope("conv_layer_1"):
+            h_conv1 = nn_layer_conv(x_image, img_color_channels, field_size_conv1,
+                                    num_features_conv1, "convolve")
+
+        ## Layer 2 - Convolve -> relu
+        with tf.name_scope("conv_layer_2"):
+            h_conv2 = nn_layer_conv(h_conv1, num_features_conv1, field_size_conv2,
+                                    num_features_conv2, "convolve")
+
+        ## Layer 3 - Convolve -> relu
+        with tf.name_scope("conv_layer_3"):
+            h_conv3 = nn_layer_conv(h_conv2, num_features_conv2, field_size_conv3,
+                                    num_features_conv3, "convolve")
+
+        ## Layer 4 - Fully connected: Mutiply -> ReLU -> Dropout
+        # We"ll have gone through 2 lots of max pooling, which will have shrunk our
+        # dimensions and need to wrangle the output of the conv layers into the
+        # correct shape
+        input_dimension_fc1 = img_x * img_y * num_features_conv3
+        h_conv3_flat = tf.reshape(h_conv3, [-1, input_dimension_fc1],
+                                name="flatten_to_vector")
+        h_fc = nn_layer_fc(h_conv3_flat, input_dimension_fc1, num_features_fc1,
+                        "fc_layer_1")
+
+        # Dropout for overfitting reduction
+        with tf.name_scope("dropout"):
+            keep_prob = tf.placeholder(tf.float32)
+            tf.summary.scalar("dropout_keep_probability", keep_prob)
+            dropped = tf.nn.dropout(h_fc, keep_prob)
+
+        ## Layer 5 - Readout layer - Fully connected: Multiply only
+        # Scores are unnormalize log probabilites
+        y_conv = nn_layer_fc(dropped, num_features_fc1, num_classes, "fc_layer_2",
+                            act=tf.identity)
+
+        # Cross-entropy loss function
+        with tf.name_scope("cross_entropy"):
+            diff = tf.nn.softmax_cross_entropy_with_logits(y_conv, y_)
+            with tf.name_scope("total"):
+                self.cross_entropy = tf.reduce_mean(diff)
+                tf.add_to_collection("losses", self.cross_entropy)
+        tf.summary.scalar("cross_entropy", self.cross_entropy)
+
+        with tf.name_scope("total_loss"):
+            self.total_loss = tf.add_n(tf.get_collection("losses"), "total_loss")
+        tf.summary.scalar("total_loss", self.total_loss)
+
+        ## Optimization step
+        with tf.name_scope("train"):
+            optimizer = tf.train.AdamOptimizer(learning_rate)
+            self.train_step = optimizer.minimize(self.total_loss)
+
+        # Merge summary statistics
+        self.merged = tf.summary.merge_all()
+
+        self.sess.run(tf.global_variables_initializer())
+        saver = tf.train.Saver()
+        if restore_filename is not None:
+           saver.restore(self.sess, restore_filename)
+
+    def get_graph(self):
+        return self.sess.graph
+
+    def get_session(self):
+        return self.sess
+
+    def compute_cross_entropy(self, feed, include_summary):
+        if include_summary:
+            return self.sess.run([self.merged, self.cross_entropy], feed_dict=feed)
+        else:
+            return self.sess.run(self.cross_entropy, feed_dict=feed)
+
+    def compute_train_step(self, feed, summarize):
+        """Train step"""
+        if summarize:
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
+        else:
+            run_options = None
+            run_metadata = None
+        return self.sess.run(
+            [self.merged, self.train_step],
+            feed_dict=feed,
+            options=run_options,
+            run_metadata=run_metadata
+        )
+
+
+
+def train_neural_net(data, network, save_filename=None):
+    """Do the training!"""
+
     max_steps = 20000 * 2
     # max_steps = 10000
     batch_size = 50
-
-    ### Variable definitions
-    # Inputs: pixel values x and class labels y_
-    x = tf.placeholder(tf.float32, shape=[None, num_pixels], name="image")
-    y_ = tf.placeholder(tf.float32, shape=[None, num_classes], name="class")
-    x_image = tf.reshape(x, [-1, img_x, img_y, img_color_channels],
-                         name="reshape_to_square")
-
-    ### Computation graph
-    ## Layer 1 - Convolve -> ReLU
-    # Wrangling x into the correct dimensions (i.e. a 28x28 image)
-    with tf.name_scope("conv_layer_1"):
-        h_conv1 = nn_layer_conv(x_image, img_color_channels, field_size_conv1,
-                                num_features_conv1, "convolve")
-
-    ## Layer 2 - Convolve -> relu
-    with tf.name_scope("conv_layer_2"):
-        h_conv2 = nn_layer_conv(h_conv1, num_features_conv1, field_size_conv2,
-                                num_features_conv2, "convolve")
-
-    ## Layer 3 - Convolve -> relu
-    with tf.name_scope("conv_layer_3"):
-        h_conv3 = nn_layer_conv(h_conv2, num_features_conv2, field_size_conv3,
-                                num_features_conv3, "convolve")
-
-    ## Layer 4 - Fully connected: Mutiply -> ReLU -> Dropout
-    # We"ll have gone through 2 lots of max pooling, which will have shrunk our
-    # dimensions and need to wrangle the output of the conv layers into the
-    # correct shape
-    input_dimension_fc1 = img_x * img_y * num_features_conv3
-    h_conv3_flat = tf.reshape(h_conv3, [-1, input_dimension_fc1],
-                              name="flatten_to_vector")
-    h_fc = nn_layer_fc(h_conv3_flat, input_dimension_fc1, num_features_fc1,
-                       "fc_layer_1")
-
-    # Dropout for overfitting reduction
-    with tf.name_scope("dropout"):
-        keep_prob = tf.placeholder(tf.float32)
-        tf.summary.scalar("dropout_keep_probability", keep_prob)
-        dropped = tf.nn.dropout(h_fc, keep_prob)
-
-    ## Layer 5 - Readout layer - Fully connected: Multiply only
-    # Scores are unnormalize log probabilites
-    y_conv = nn_layer_fc(dropped, num_features_fc1, num_classes, "fc_layer_2",
-                         act=tf.identity)
-
-    # Cross-entropy loss function
-    with tf.name_scope("cross_entropy"):
-        diff = tf.nn.softmax_cross_entropy_with_logits(y_conv, y_)
-        with tf.name_scope("total"):
-            cross_entropy = tf.reduce_mean(diff)
-            tf.add_to_collection("losses", cross_entropy)
-    tf.summary.scalar("cross_entropy", cross_entropy)
-
-    with tf.name_scope("total_loss"):
-        total_loss = tf.add_n(tf.get_collection("losses"), "total_loss")
-    tf.summary.scalar("total_loss", total_loss)
-
-    ## Optimization step
-    with tf.name_scope("train"):
-        optimizer = tf.train.AdamOptimizer(learning_rate)
-        train_step = optimizer.minimize(total_loss)
-
-    ### Training
-
-    # Merge summary statistics
-    merged = tf.summary.merge_all()
-    train_writer = tf.summary.FileWriter("data/train_ttt", sess.graph)
-    test_writer = tf.summary.FileWriter("data/test_ttt")
 
     def feed_dict(batch_size, data_split, use_dropout):
         # Gonna use this to fill up the feed 
@@ -378,21 +416,21 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
         result = {x: xs, y_: ys, keep_prob: k}
         return result
 
+    train_writer = tf.summary.FileWriter("data/train_ttt", network.get_graph())
+    test_writer = tf.summary.FileWriter("data/test_ttt")
+
     # Do the optimization
-    sess.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
-    if restore_filename is not None:
-        saver.restore(sess, restore_filename)
  
     for i in range(max_steps):
         # Grab the next batch of training examples
         if i % 100 == 0:
             feed = feed_dict(batch_size, DataSplit.validation, False)
-            summary, entropy = sess.run([merged, cross_entropy], feed_dict=feed)
+            summary, entropy = network.compute_cross_entropy(feed, True)
             test_writer.add_summary(summary, i)
             print("Step %d, validation cross entropy %g" % (i, entropy))
             feed = feed_dict(batch_size, DataSplit.train, False)
-            entropy = sess.run(cross_entropy, feed_dict=feed)
+            entropy = network.compute_cross_entropy(feed, False)
             print("Step %d, training cross entropy %g" % (i, entropy))            
         else:
             if i % 100 == 99:
@@ -400,25 +438,22 @@ def train_neural_net(data, restore_filename=None, save_filename=None):
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
                 feed = feed_dict(batch_size, DataSplit.train, True)
-                summary, _ = sess.run([merged, train_step],
-                                      feed_dict=feed,
-                                      options=run_options,
-                                      run_metadata=run_metadata)
+                summary, _ = network.compute_training_step(feed, True)
                 train_writer.add_run_metadata(run_metadata, "step%d" % i)
                 train_writer.add_summary(summary, i)
             else:
                 # Just do a regular step
                 feed = feed_dict(batch_size, DataSplit.train, True)
-                summary, _ = sess.run([merged, train_step], feed_dict=feed)
+                summary, _ = network.compute_training_step(feed, False)
                 train_writer.add_summary(summary, i)
         if i % 1000 == 0:
             # Save off a checkpoint
             if save_filename is not None:
-                saver.save(sess, save_filename)
+                saver.save(network.get_session, save_filename)
 
     # Test against the full test set
     feed = feed_dict(data.train.num_examples, DataSplit.test, False)
-    summary, entropy = sess.run([merged, cross_entropy], feed_dict=feed)
+    summary, entropy = network.compute_cross_entropy(feed, True)
     test_writer.add_summary(summary, max_steps)
     print("Final test cross entropy: %g" % entropy)
 

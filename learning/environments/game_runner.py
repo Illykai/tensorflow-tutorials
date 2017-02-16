@@ -11,7 +11,8 @@ DATA_DIR = "data"
 
 def main():
     """Do the cool things"""
-    # num_games = 100000
+    print("Running...")
+    # num_games = 100
     # game = TicTacToeGame()
     # players = []
     # players.append(RandomPlayer())
@@ -19,9 +20,10 @@ def main():
     # runner = GameRunner(game, players)
     # runner.run_tournament(num_games)
 
-    generate_random_game_data()
+    # generate_random_game_data()
     # generate_negamax_game_data()
     # generate_tic_tac_toe_game_tree_pickle_file()
+    print("Complete")
 
 def generate_game_data(game, players, num_games, file_suffix):
     """Generates data from bots playing a game against each other
