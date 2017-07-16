@@ -42,7 +42,7 @@ class NegamaxPlayer(Player):
     def get_action(self, game):
         state = game.get_state()
         node = self.state_to_node_dict[str(state)]
-        action, _ = negamax_search(game, node, True)
+        action, _ = negamax_search(game, node, game.get_active_player())
         return action
 
     def get_name(self):

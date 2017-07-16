@@ -10,12 +10,12 @@ import random
 import numpy
 import tensorflow as tf
 from learning.players.basic import Player
+from learning.environments.tic_tac_toe import TicTacToeGame
 
 DataSets = collections.namedtuple('Datasets', ['train', 'validation', 'test'])
 WEIGHT_STD_DEV = 0.1
 BIAS_DEFAULT = 0.1
 WEIGHT_DECAY = 0.0025
-# WEIGHT_DECAY = 0.005
 
 def main():
     """Handy entry point for testing"""
@@ -26,21 +26,29 @@ def main():
     # label_type = LabelType.action
     filename = "data/2017_02_12_21_31_45_games_10000__tic_tac_toe_random_vs_random_games.csv"
     # filename = "data/2017_02_12_21_32_34_games_10000__tic_tac_toe_negamax_vs_random_games.csv"
-    data_sets = read_data_sets(filename, test_percent, train_percent, label_type)
-    restore_filename = None
-    # restore_filename = "data/random_vs_random.ckpt"
+    # data_sets = read_data_sets(filename, test_percent, train_percent, label_type)
+    # restore_filename = None
+    restore_filename = "data/random_vs_random.ckpt"
     # restore_filename = "data/negamax_vs_random.ckpt"
     # save_filename = None
     save_filename = "data/random_vs_random.ckpt"
     # save_filename = "data/negamax_vs_random.ckpt"
     network = TicTacToeNet(restore_filename)
-    train_neural_net(data_sets, network, save_filename)
+    # network.train(data_sets, save_filename)
+    game = TicTacToeGame()
+    player = WinPredictionPlayer(network)
+    action = player.get_action(game)
     print("Complete")
 
 def generate_win_prediction_player_from_dummy():
     """Make a dummy player for testing"""
     dummy_net = DummyNetwork()
     return WinPredictionPlayer(dummy_net)
+
+def generate_win_prediction_player_from_restore(restore_filename):
+    """Make a win prediction player from a pre-trained NN restore file"""
+    network = TicTacToeNet(restore_filename)
+    return WinPredictionPlayer(network)
 
 class WinPredictionPlayer(Player):
     """
@@ -55,7 +63,6 @@ class WinPredictionPlayer(Player):
         """
         Get the player's move given the current game state
         """
-
         valid_actions = game.get_valid_moves()
         current_state = game.get_state()
         successors = [(game.get_state_successor(current_state, action), action)
@@ -64,7 +71,8 @@ class WinPredictionPlayer(Player):
         best_prob = -1.0
         best_actions = []
         for (state, action) in successors:
-            win_probs = self.network.query(state)
+            tensor_state = numpy.array(state, dtype=numpy.uint8)
+            win_probs = self.network.predict_class(tensor_state)[0]
             if win_probs[player] > best_prob:
                 best_prob = win_probs[player]
                 best_actions = [action]
@@ -142,7 +150,7 @@ def read_data_sets(filename,
                    label_type):
     """Load data from the games"""
 
-    # Generate parallel arrays of states and labels. We keep the states in 
+    # Generate parallel arrays of states and labels.
     states = []
     labels = []
     with open(filename, "r") as data_file:
@@ -270,7 +278,7 @@ class TicTacToeNet:
     """TicTacToe convolutional neural net"""
 
     def __init__(self, restore_filename=None):
-        self.sess = tf.InteractiveSession()
+        self.sess = tf.Session()
 
         ### Data specification
         img_x = 3
@@ -278,8 +286,7 @@ class TicTacToeNet:
         img_color_channels = 1 # greyscale images
         num_pixels = img_x * img_y
         num_classes = 3
-        # num_classes = 10
-        
+
         ### Hyperparameters
         # Layer 1
         field_size_conv1 = 2
@@ -291,16 +298,16 @@ class TicTacToeNet:
         field_size_conv3 = 2
         num_features_conv3 = 64
         # Layer 4
-        num_features_fc1 = 512
+        num_features_fc1 = 128
         # Training
-        learning_rate = 1e-4
+        learning_rate = 1e-3
 
         ### Variable definitions
         # Inputs: pixel values x and class labels y_
-        x = tf.placeholder(tf.float32, shape=[None, num_pixels], name="image")
-        y_ = tf.placeholder(tf.float32, shape=[None, num_classes], name="class")
-        x_image = tf.reshape(x, [-1, img_x, img_y, img_color_channels],
-                            name="reshape_to_square")
+        self.inputs = tf.placeholder(tf.float32, shape=[None, num_pixels], name="image")
+        self.class_labels = tf.placeholder(tf.float32, shape=[None, num_classes], name="class")
+        x_image = tf.reshape(self.inputs, [-1, img_x, img_y, img_color_channels],
+                             name="reshape_to_square")
 
         ### Computation graph
         ## Layer 1 - Convolve -> ReLU
@@ -325,24 +332,28 @@ class TicTacToeNet:
         # correct shape
         input_dimension_fc1 = img_x * img_y * num_features_conv3
         h_conv3_flat = tf.reshape(h_conv3, [-1, input_dimension_fc1],
-                                name="flatten_to_vector")
+                                  name="flatten_to_vector")
         h_fc = nn_layer_fc(h_conv3_flat, input_dimension_fc1, num_features_fc1,
-                        "fc_layer_1")
+                           "fc_layer_1")
 
         # Dropout for overfitting reduction
         with tf.name_scope("dropout"):
-            keep_prob = tf.placeholder(tf.float32)
-            tf.summary.scalar("dropout_keep_probability", keep_prob)
-            dropped = tf.nn.dropout(h_fc, keep_prob)
+            self.keep_prob = tf.placeholder(tf.float32)
+            tf.summary.scalar("dropout_keep_probability", self.keep_prob)
+            dropped = tf.nn.dropout(h_fc, self.keep_prob)
 
         ## Layer 5 - Readout layer - Fully connected: Multiply only
-        # Scores are unnormalize log probabilites
-        y_conv = nn_layer_fc(dropped, num_features_fc1, num_classes, "fc_layer_2",
-                            act=tf.identity)
+        # Scores are unnormalized log probabilites
+        self.logits = nn_layer_fc(dropped, num_features_fc1, num_classes, "fc_layer_2",
+                             act=tf.identity)
+
+        # Probability of class
+        with tf.name_scope("class_probabilities"):
+            self.class_probabilities = tf.nn.softmax(logits=self.logits, name="class_probabilities")
 
         # Cross-entropy loss function
         with tf.name_scope("cross_entropy"):
-            diff = tf.nn.softmax_cross_entropy_with_logits(y_conv, y_)
+            diff = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits, labels=self.class_labels)
             with tf.name_scope("total"):
                 self.cross_entropy = tf.reduce_mean(diff)
                 tf.add_to_collection("losses", self.cross_entropy)
@@ -363,13 +374,7 @@ class TicTacToeNet:
         self.sess.run(tf.global_variables_initializer())
         saver = tf.train.Saver()
         if restore_filename is not None:
-           saver.restore(self.sess, restore_filename)
-
-    def get_graph(self):
-        return self.sess.graph
-
-    def get_session(self):
-        return self.sess
+            saver.restore(self.sess, restore_filename)
 
     def compute_cross_entropy(self, feed, include_summary):
         if include_summary:
@@ -377,32 +382,25 @@ class TicTacToeNet:
         else:
             return self.sess.run(self.cross_entropy, feed_dict=feed)
 
-    def compute_train_step(self, feed, summarize):
+    def compute_training_step(self, feed):
         """Train step"""
-        if summarize:
-            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-            run_metadata = tf.RunMetadata()
-        else:
-            run_options = None
-            run_metadata = None
-        return self.sess.run(
+        summary, _ = self.sess.run([self.merged, self.train_step], feed_dict=feed)
+        return summary
+
+    def compute_training_step_with_metadata(self, feed, run_metadata):
+        """Train step"""
+        run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+        summary, _ = self.sess.run(
             [self.merged, self.train_step],
             feed_dict=feed,
             options=run_options,
             run_metadata=run_metadata
         )
+        return summary
 
-
-
-def train_neural_net(data, network, save_filename=None):
-    """Do the training!"""
-
-    max_steps = 20000 * 2
-    # max_steps = 10000
-    batch_size = 50
-
-    def feed_dict(batch_size, data_split, use_dropout):
-        # Gonna use this to fill up the feed 
+    def get_feed_dict(self, data, batch_size, data_split, use_dropout):
+        """Generate the data feed tensor"""
+        # Gonna use this to fill up the feed
         if data_split == DataSplit.train:
             xs, ys = data.train.next_batch(batch_size)
         elif data_split == DataSplit.test:
@@ -413,49 +411,62 @@ def train_neural_net(data, network, save_filename=None):
             # We messed up!
             pass
         k = 0.5 if use_dropout else 1.0
-        result = {x: xs, y_: ys, keep_prob: k}
+        result = {self.inputs: xs, self.class_labels: ys, self.keep_prob: k}
         return result
 
-    train_writer = tf.summary.FileWriter("data/train_ttt", network.get_graph())
-    test_writer = tf.summary.FileWriter("data/test_ttt")
+    def predict_class(self, input_data):
+        """Get the class label predictions for the input data"""
+        feed = {self.inputs: numpy.array([input_data]), self.keep_prob: 1.0}
+        probabilities = self.sess.run(
+            self.class_probabilities,
+            feed_dict=feed
+        )
+        return probabilities
 
-    # Do the optimization
-    saver = tf.train.Saver()
- 
-    for i in range(max_steps):
-        # Grab the next batch of training examples
-        if i % 100 == 0:
-            feed = feed_dict(batch_size, DataSplit.validation, False)
-            summary, entropy = network.compute_cross_entropy(feed, True)
-            test_writer.add_summary(summary, i)
-            print("Step %d, validation cross entropy %g" % (i, entropy))
-            feed = feed_dict(batch_size, DataSplit.train, False)
-            entropy = network.compute_cross_entropy(feed, False)
-            print("Step %d, training cross entropy %g" % (i, entropy))            
-        else:
-            if i % 100 == 99:
-                # Write out summary statistics about the training
-                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-                run_metadata = tf.RunMetadata()
-                feed = feed_dict(batch_size, DataSplit.train, True)
-                summary, _ = network.compute_training_step(feed, True)
-                train_writer.add_run_metadata(run_metadata, "step%d" % i)
-                train_writer.add_summary(summary, i)
+    def train(self, data, save_filename=None):
+        """Do the training!"""
+        max_steps = 20000 * 2
+        # max_steps = 10000
+        batch_size = 50
+
+        train_writer = tf.summary.FileWriter("data/train_ttt", self.sess.graph)
+        test_writer = tf.summary.FileWriter("data/test_ttt")
+
+        # Do the optimization
+        saver = tf.train.Saver()
+        for i in range(max_steps):
+            # Grab the next batch of training examples
+            if i % 100 == 0:
+                feed = self.get_feed_dict(data, batch_size, DataSplit.validation, False)
+                summary, entropy = self.compute_cross_entropy(feed, True)
+                test_writer.add_summary(summary, i)
+                print("Step %d, validation cross entropy %g" % (i, entropy))
+                feed = self.get_feed_dict(data, batch_size, DataSplit.train, False)
+                entropy = self.compute_cross_entropy(feed, False)
+                print("Step %d, training cross entropy %g" % (i, entropy))
             else:
-                # Just do a regular step
-                feed = feed_dict(batch_size, DataSplit.train, True)
-                summary, _ = network.compute_training_step(feed, False)
-                train_writer.add_summary(summary, i)
-        if i % 1000 == 0:
-            # Save off a checkpoint
-            if save_filename is not None:
-                saver.save(network.get_session, save_filename)
+                if i % 100 == 99:
+                    # Write out summary statistics about the training
+                    run_metadata = tf.RunMetadata()
+                    feed = self.get_feed_dict(data, batch_size, DataSplit.train, True)
+                    summary = self.compute_training_step_with_metadata(feed, run_metadata)
+                    train_writer.add_run_metadata(run_metadata, "step%d" % i)
+                    train_writer.add_summary(summary, i)
+                else:
+                    # Just do a regular step
+                    feed = self.get_feed_dict(data, batch_size, DataSplit.train, True)
+                    summary = self.compute_training_step(feed)
+                    train_writer.add_summary(summary, i)
+            if i % 1000 == 0:
+                # Save off a checkpoint
+                if save_filename is not None:
+                    saver.save(self.sess, save_filename)
 
-    # Test against the full test set
-    feed = feed_dict(data.train.num_examples, DataSplit.test, False)
-    summary, entropy = network.compute_cross_entropy(feed, True)
-    test_writer.add_summary(summary, max_steps)
-    print("Final test cross entropy: %g" % entropy)
+        # Test against the full test set
+        feed = self.get_feed_dict(data, data.train.num_examples, DataSplit.test, False)
+        summary, entropy = self.compute_cross_entropy(feed, True)
+        test_writer.add_summary(summary, max_steps)
+        print("Final test cross entropy: %g" % entropy)
 
 def bias_variable(shape):
     """

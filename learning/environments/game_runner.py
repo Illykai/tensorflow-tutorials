@@ -6,19 +6,31 @@ import pickle
 from learning.environments.tic_tac_toe import TicTacToeGame
 from learning.players.basic import RandomPlayer
 from learning.players import search
+from learning.players import neural
 
 DATA_DIR = "data"
 
 def main():
     """Do the cool things"""
     print("Running...")
-    # num_games = 100
-    # game = TicTacToeGame()
-    # players = []
-    # players.append(RandomPlayer())
-    # players.append(RandomPlayer())
-    # runner = GameRunner(game, players)
-    # runner.run_tournament(num_games)
+    # Set up players
+    nn_filename = "%s/random_vs_random.ckpt" % DATA_DIR
+    nn_player = neural.generate_win_prediction_player_from_restore(nn_filename)
+    pickle_filename = "%s/tic_tac_toe_game_tree.pkl" % DATA_DIR
+    negamax_player = search.generate_player_from_pickle_file(pickle_filename)
+    negamax_player2 = search.generate_player_from_pickle_file(pickle_filename)
+    # random_player = RandomPlayer()
+
+    # Run tournament
+    num_games = 100
+    game = TicTacToeGame()
+    players = []
+    # players.append(nn_player)
+    players.append(negamax_player)
+    players.append(negamax_player2)
+    # players.append(random_player)
+    runner = GameRunner(game, players)
+    runner.run_tournament(num_games)
 
     # generate_random_game_data()
     # generate_negamax_game_data()
