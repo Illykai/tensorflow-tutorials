@@ -1,0 +1,43 @@
+2/20/2017
+=== What is a good cross entropy loss? ===
+I've been trying to work out whether the cross-entropy scores that I'm getting out of training are any good. It seems like they're terrible. They're in the 0.7-0.8 range, which is substantially higher than MNIST. I made a quick spreadsheet to show some examples of what cross-entropy in that range means for different possible predictions and their ground truth. It turns out that it's kind of difficult to interpret.
+
+CE(p,q) = -1 * sum_x(p(x)*log(q(x))
+
+The thing is that the best case is p = q, in which case the cross-entropy is just the entropy. Say the ground truth is that each class is equally likely, then you get the following:
+
+C	Actual	Pred	CE
+0	0.333	0.998	4.601231683
+1	0.333	0.001	
+2	0.333	0.001
+
+Or if it's super tilted to one class then you get 
+
+C	Actual	Pred	CE
+0	0.98	0.98	0.1119020569
+1	0.01	0.01	
+2	0.01	0.01
+
+So what constitutes a good score varies wildly between these cases.
+
+=== Hyperparameter tuning ===
+There are soooooo many hyperparameters to mess with. I have no idea what is best to tinker with, which makes it a double problem of 1) not knowing what a genuinely good loss is and 2) not knowing what the most likely candidates to improve it are.
+
+I could:
+a) Add more layers
+b) Tweak the number of features in the hidden layers
+c) Tweak the number of features in the convolutional layers
+d) Try doing batchnorm
+e) Tweak the learning rate
+
+I feel like a need some systematic way of trying these various things. It's very easy to fall into a pattern of just fiddling around, trying stuff, and not really knowing what's a sensible thing to be doing.
+
+=== Graph structure mystery ===
+Looking at my graph in tensorboard, there are two tensors coming out of the ReLU node in my fully connected layer and I don't know why.
+Turns out that Dropout splits its inputs up into a shape tensor and a div tensor.
+
+=== Learning rate tinkering ===
+With 10k steps
+learning rate: 0.25     0.01    0.001   0.0001
+validation:    0.958    1.11    0.75    0.91
+final test CE: 0.959    0.956   0.71    0.91
